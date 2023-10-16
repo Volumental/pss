@@ -94,7 +94,7 @@ class stable_sort_task {
     Compare comp;
     signed char inplace;
 public:
-    stable_sort_task(oneapi::tbb::task_group& tg_, RandomAccessIterator1 xs_, RandomAccessIterator1 xe_, RandomAccessIterator2 zs_, int inplace_, Compare comp_ ) : 
+    stable_sort_task(oneapi::tbb::task_group& tg_, RandomAccessIterator1 xs_, RandomAccessIterator1 xe_, RandomAccessIterator2 zs_, int inplace_, Compare comp_ ) :
         tg(tg_), xs(xs_), xe(xe_), zs(zs_), comp(comp_), inplace(inplace_)
     {}
     void operator()() const;
@@ -104,32 +104,24 @@ template<typename RandomAccessIterator1, typename RandomAccessIterator2, typenam
 void stable_sort_task<RandomAccessIterator1, RandomAccessIterator2, Compare>::operator()() const {
     const size_t SORT_CUT_OFF = 500;
     if ((size_t) (xe - xs) <= SORT_CUT_OFF) {
-        stable_sort_base_case(xs, xe, zs, inplace, comp); 
+        stable_sort_base_case(xs, xe, zs, inplace, comp);
         return;
     } else {
         RandomAccessIterator1 xm = xs + (xe - xs) / 2;
         RandomAccessIterator2 zm = zs + (xm - xs);
         RandomAccessIterator2 ze = zs + (xe - xs);
+        oneapi::tbb::parallel_invoke(
+            stable_sort_task(tg, xm,xe,zm,!inplace, comp), // right
+            stable_sort_task(tg, xs,xm,zs,!inplace, comp)); // left
+
         if (inplace)
-            tg.run(merge_task<RandomAccessIterator2,RandomAccessIterator2,RandomAccessIterator1,Compare>(tg, zs, zm, zm, ze, xs, inplace==2, comp));
-            //m = new (allocate_continuation()) merge_task<RandomAccessIterator2,RandomAccessIterator2,RandomAccessIterator1,Compare>(zs, zm, zm, ze, xs, inplace==2, comp);
+            merge_task<RandomAccessIterator2,RandomAccessIterator2,RandomAccessIterator1,Compare>(tg, zs, zm, zm, ze, xs, inplace==2, comp)();
         else
-            tg.run(merge_task<RandomAccessIterator1,RandomAccessIterator1,RandomAccessIterator2,Compare>(tg, xs, xm, xm, xe, zs, false, comp));
-            //m = new (allocate_continuation()) merge_task<RandomAccessIterator1,RandomAccessIterator1,RandomAccessIterator2,Compare>(xs, xm, xm, xe, zs, false, comp);
-        //m->set_ref_count(2);
-        //task* right = new(m->allocate_child()) stable_sort_task(xm,xe,zm,!inplace, comp);
-        //spawn(*right);
-        // right
-        tg.run(stable_sort_task(tg, xm,xe,zm,!inplace, comp));
-        // left
-        tg.run(stable_sort_task(tg, xs,xm,zs,!inplace, comp));
-        //recycle_as_child_of(*m); 
-        //xe=xm;
-        //inplace=!inplace;
+            merge_task<RandomAccessIterator1,RandomAccessIterator1,RandomAccessIterator2,Compare>(tg, xs, xm, xm, xe, zs, false, comp)();
     }
 }
 
-} // namespace internal 
+} // namespace internal
 
 template<typename RandomAccessIterator, typename Compare>
 void parallel_stable_sort( RandomAccessIterator xs, RandomAccessIterator xe, Compare comp ) {
